@@ -11,3 +11,8 @@ __pycache__/
 [._]ss[a-gi-z]
 [._]sw[a-p]
 .pixi
+lightning_logs
+nohup.out
+*.pkl
+*.log
+*.ckpt
