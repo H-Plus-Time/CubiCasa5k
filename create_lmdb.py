@@ -4,9 +4,12 @@ import pickle
 import argparse
 import logging
 import numpy as np
+np._set_promotion_state("weak_and_warn")
 from datetime import datetime
 from tqdm import tqdm
 from floortrans.loaders.svg_loader import FloorplanSVG
+import cProfile
+import blosc2
 
 
 def main(args, logger):
@@ -22,16 +25,23 @@ def main(args, logger):
             key = d['folder']
             logger.info("Adding " + key)
             with env.begin(write=True, buffers=True) as txn:
+                # TODO: account for blosc tensor packing
                 txn.put(key.encode('ascii'), pickle.dumps(d))
     else:
+        with env.begin() as txn:
+            all_keys = set(txn.cursor().iternext(values=False))
         folders = np.genfromtxt(args.data_path + args.txt, dtype='str')
         for i, f in tqdm(enumerate(folders), total=len(folders)):
             with env.begin(write=True, buffers=True) as txn:
-                elem = txn.get(f.encode('ascii'))
+                elem = f.encode('ascii') in all_keys
                 if not elem:
                     logger.info("Adding " + f)
                     elem = data[i]
-                    txn.put(f.encode('ascii'), pickle.dumps(elem))
+                    output_elem = elem.model_dump(mode='python') | {
+                        'image': blosc2.pack_tensor(elem.image.contiguous(), cparams=dict(nthreads=blosc2.detect_number_of_cores())),
+                        'label': blosc2.pack_tensor(elem.label.contiguous(), cparams=dict(nthreads=blosc2.detect_number_of_cores())),
+                    }
+                    txn.put(f.encode("ascii"), pickle.dumps(output_elem))
                 else:
                     logger.info(f + ' already exists')
 

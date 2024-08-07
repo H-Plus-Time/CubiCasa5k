@@ -1,36 +1,58 @@
 import math
 import numpy as np
 from xml.dom import minidom
-from skimage.draw import polygon
+from lxml import etree
+# from skimage.draw import polygon
 from svgpathtools import parse_path
 from logging import warning
+from PIL import Image, ImageDraw
+from numba import jit, jit_module
+NAMESPACE = "{http://www.w3.org/2000/svg}"
 
+def polygon(X, Y):
+    # We don't know the image size :shrug:
+    # This can be derived from max(Y), max(X)
+    min_Y = np.min(Y.astype(np.int32))
+    min_X = np.min(X.astype(np.int32))
+    max_Y = np.max(Y.astype(np.int32)) + 1         
+    max_X = np.max(X.astype(np.int32)) + 1
+    try:
+        image_instance = Image.new("L", (max_Y - min_Y, max_X - min_X))
+        d = ImageDraw.Draw(image_instance)
+        d.polygon(np.stack([Y - min_Y, X - min_X]).T.flatten().tolist(), fill=(1,))
+        px_arr = np.array(image_instance)
+        coords = np.argwhere(px_arr)
+        return coords[:, 0] + min_X, coords[:, 1] + min_Y
+    except Exception as e:
+        print(e, max_X, max_Y, min_X, min_Y)
+        print((max_Y - min_Y, max_X - min_X))
+        raise e
 
 def get_labels(path, height, width):
-    svg = minidom.parse(path)
+    svg = etree.parse(path).getroot()
     walls = np.empty((height, width), dtype=np.uint8)
     walls.fill(len(rooms))
     icons = np.zeros((height, width), dtype=np.uint8)
-    for e in svg.getElementsByTagName('g'):
-        if e.getAttribute("id") == "Wall":
+    for e in svg.findall(f".//{NAMESPACE}g"):
+        if e.get("id") == "Wall":
             rr, cc = get_polygon(e)
             walls[rr, cc] = 0
 
-        if e.getAttribute("id") == "Window":
+        if e.get("id") == "Window":
             rr, cc = get_polygon(e)
             icons[rr, cc] = 1
 
-        if e.getAttribute("id") == "Door":
+        if e.get("id") == "Door":
             # How to reperesent empty door space
             rr, cc = get_polygon(e)
             icons[rr, cc] = 2
 
-        if "FixedFurniture " in e.getAttribute("class"):
+        if "FixedFurniture " in e.get("class", ""):
             num = get_icon_number(e)
             rr, cc = get_icon(e)
             icons[rr, cc] = num
 
-        if "Space " in e.getAttribute("class"):
+        if "Space " in e.get("class", ""):
             num = get_room_number(e)
             rr, cc = get_polygon(e)
             walls[rr, cc] = num
@@ -39,30 +61,30 @@ def get_labels(path, height, width):
 
 
 def get_room_number(e, rooms):
-    name_list = e.getAttribute("class").split(" ")
+    name_list = e.get("class", "").split(" ")
     room_type = name_list[1]
     try:
         return rooms[room_type]
     except KeyError:
-        warning("Room type " + e.getAttribute("class") + " not defined.")
+        warning("Room type " + e.get("class") + " not defined.")
         return rooms['Undefined']
 
 
 def get_icon_number(e, icons):
-    name_list = e.getAttribute("class").split(" ")
+    name_list = e.get("class", "").split(" ")
     icon_type = name_list[1]
 
     try:
         return icons[icon_type]
     except KeyError:
-        warning("Icon type " + e.getAttribute("class") + " not defined.")
+        warning("Icon type " + e.get("class") + " not defined.")
         return icons['Misc']
 
-
+# @jit(nopython=False, forceobj=True)
 def get_icon(ee):
     parent_transform = None
-    if ee.parentNode.getAttribute("class") == "FixedFurnitureSet":
-        parent_transform = ee.parentNode.getAttribute("transform")
+    if ee.getparent().get("class") == "FixedFurnitureSet":
+        parent_transform = ee.getparent().get("transform")
         strings = parent_transform.split(',')
         a_p = float(strings[0][7:])
         b_p = float(strings[1])
@@ -74,7 +96,7 @@ def get_icon(ee):
                         [b_p, d_p, f_p],
                         [0, 0, 1]])
 
-    transform = ee.getAttribute("transform")
+    transform = ee.get("transform")
     strings = transform.split(',')
     a = float(strings[0][7:])
     b = float(strings[1])
@@ -91,11 +113,11 @@ def get_icon(ee):
     Y = np.array([])
 
     try:
-        toilet = next(p for p in ee.childNodes if p.nodeName ==
-                      'g' and p.getAttribute("class") == "BoundaryPolygon")
+        toilet = next(p for p in ee.getchildren() if p.tag ==
+                      f'{NAMESPACE}g' and p.get("class") == "BoundaryPolygon")
 
-        for p in toilet.childNodes:
-            if p.nodeName == "polygon":
+        for p in toilet.getchildren():
+            if p.tag == f"{NAMESPACE}polygon":
                 X, Y = get_icon_polygon(p)
                 break
         else:
@@ -103,7 +125,7 @@ def get_icon(ee):
             points = np.column_stack((x_all, y_all))
 
             X, Y = get_max_corners(points)
-            # if p.nodeName == "path":
+            # if p.tag == f"{NAMESPACE}path":
                 # X, Y = get_icon_path(p)
 
     except StopIteration:
@@ -133,30 +155,30 @@ def get_icon(ee):
 
 def get_corners(g):
     x_all, y_all = [], []
-    for pol in g.childNodes:
-        if pol.nodeName == 'polygon':
+    for pol in g.getchildren():
+        if pol.tag == f'{NAMESPACE}polygon':
             x, y = get_icon_polygon(pol)
             x_all = np.append(x_all, x)
             y_all = np.append(y_all, y)
-        elif pol.nodeName == 'path':
+        elif pol.tag == f'{NAMESPACE}path':
             x, y = get_icon_path(pol)
             x_all = np.append(x_all, x)
             y_all = np.append(y_all, y)
-        elif pol.nodeName == 'rect':
-            x = pol.getAttribute('x')
+        elif pol.tag == f'{NAMESPACE}rect':
+            x = pol.get('x')
             if x == '':
                 x = 1.0
             else:
                 x = float(x)
-            y = pol.getAttribute('y')
+            y = pol.get('y')
             if y == '':
                 y = 1.0
             else:
                 y = float(y)
             x_all = np.append(x_all, x)
             y_all = np.append(y_all, y)
-            w = float(pol.getAttribute('width'))
-            h = float(pol.getAttribute('height'))
+            w = float(pol.get('width'))
+            h = float(pol.get('height'))
             x_all = np.append(x_all, x+w)
             y_all = np.append(y_all, y+h)
 
@@ -186,9 +208,9 @@ def get_max_corners(points):
 
     return X, Y
 
-
+# @jit(nopython=False, forceobj=True)
 def make_boudary_polygon(pol):
-    g_gen = (c for c in pol.childNodes if c.nodeName == 'g')
+    g_gen = (c for c in pol.getchildren() if c.tag == f'{NAMESPACE}g')
 
     x_all, y_all = [], []
     for g in g_gen:
@@ -203,7 +225,7 @@ def make_boudary_polygon(pol):
 
 
 def get_icon_path(pol):
-    path = pol.getAttribute("d")
+    path = pol.get("d")
     try:
         path_alt = parse_path(path)
         minx, maxx, miny, maxy = path_alt.bbox()
@@ -222,7 +244,7 @@ def get_icon_path(pol):
 
 
 def get_icon_polygon(pol):
-    points = pol.getAttribute("points").split(' ')
+    points = pol.get("points").split(' ')
 
     return get_XY(points)
 
@@ -258,8 +280,8 @@ def get_XY(points):
 
 
 def get_points(e):
-    pol = next(p for p in e.childNodes if p.nodeName == "polygon")
-    points = pol.getAttribute("points").split(' ')
+    pol = next(p for p in e.getchildren() if p.tag == f"{NAMESPACE}polygon")
+    points = pol.get("points").split(' ')
     points = points[:-1]
 
     X, Y = np.array([]), np.array([])
@@ -282,8 +304,8 @@ def get_direction(X, Y):
 
 
 def get_polygon(e):
-    pol = next(p for p in e.childNodes if p.nodeName == "polygon")
-    points = pol.getAttribute("points").split(' ')
+    pol = next(p for p in e.getchildren() if p.tag == f"{NAMESPACE}polygon")
+    points = pol.get("points").split(' ')
     points = points[:-1]
 
     X, Y = np.array([]), np.array([])
@@ -514,7 +536,7 @@ class LineWall(Wall):
 class PolygonWall(Wall):
     def __init__(self, e, id, shape=None):
         self.id = id
-        self.name = e.getAttribute('id')
+        self.name = e.get('id')
         self.X, self.Y = self.get_points(e)
         if abs(max(self.X)-min(self.X)) < 4 or abs(max(self.Y)-min(self.Y)) < 4:
             # wall is too small and we ignore it.
@@ -535,8 +557,8 @@ class PolygonWall(Wall):
         self.min_coord, self.max_coord = self.get_width_coods(self.X, self.Y)
 
     def get_points(self, e):
-        pol = next(p for p in e.childNodes if p.nodeName == "polygon")
-        points = pol.getAttribute("points").split(' ')
+        pol = next(p for p in e.getchildren() if p.tag == f"{NAMESPACE}polygon")
+        points = pol.get("points").split(' ')
         points = points[:-1]
 
         X, Y = np.array([]), np.array([])
@@ -814,3 +836,5 @@ class PolygonWall(Wall):
             walls.append(wall)
 
         return walls
+
+# jit_module(nopython=False, forceobj=True, error_model="numpy")

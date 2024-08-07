@@ -3,26 +3,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 from floortrans.models import model_1427
 
-
 class Residual(nn.Module):
-    def __init__(self, numIn, numOut):
+    def __init__(self, num_in, num_out):
         super(Residual, self).__init__()
-        self.numIn = numIn
-        self.numOut = numOut
-        self.bn = nn.BatchNorm2d(self.numIn)
+        self.num_in = num_in
+        self.num_out = num_out
+        self.bn = nn.BatchNorm2d(self.num_in)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(self.numIn, int(
-            self.numOut / 2), bias=True, kernel_size=1)
-        self.bn1 = nn.BatchNorm2d(int(self.numOut / 2))
-        self.conv2 = nn.Conv2d(int(self.numOut / 2), int(self.numOut / 2),
+        self.conv1 = nn.Conv2d(self.num_in, int(
+            self.num_out / 2), bias=True, kernel_size=1)
+        self.bn1 = nn.BatchNorm2d(int(self.num_out / 2))
+        self.conv2 = nn.Conv2d(int(self.num_out / 2), int(self.num_out / 2),
                                bias=True, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(int(self.numOut / 2))
-        self.conv3 = nn.Conv2d(int(self.numOut / 2),
-                               self.numOut, bias=True, kernel_size=1)
+        self.bn2 = nn.BatchNorm2d(int(self.num_out / 2))
+        self.conv3 = nn.Conv2d(int(self.num_out / 2),
+                               self.num_out, bias=True, kernel_size=1)
 
-        if self.numIn != self.numOut:
+        if self.num_in != self.num_out:
             self.conv4 = nn.Conv2d(
-                self.numIn, self.numOut, bias=True, kernel_size=1)
+                self.num_in, self.num_out, bias=True, kernel_size=1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -45,14 +44,14 @@ class Residual(nn.Module):
         out = self.relu(out)
         out = self.conv3(out)
 
-        if self.numIn != self.numOut:
+        if self.num_in != self.num_out:
             residual = self.conv4(x)
 
         return out + residual
 
 
 class hg_furukawa_original(nn.Module):
-    def __init__(self, n_classes):
+    def __init__(self, n_classes: int):
         super(hg_furukawa_original, self).__init__()
         self.conv1_ = nn.Conv2d(
             3, 64, bias=True, kernel_size=7, stride=2, padding=3)
@@ -132,7 +131,7 @@ class hg_furukawa_original(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         out = self.conv1_(x)
         out = self.bn1(out)
         out = self.relu1(out)
@@ -203,7 +202,7 @@ class hg_furukawa_original(nn.Module):
         out = self.relu3(out)
         out = self.conv4_(out)
         out = self.upsample(out)
-        # heatmap channels go trough sigmoid
+        # heatmap channels go through sigmoid
         out[:, :21] = self.sigmoid(out[:, :21])
         return out
 

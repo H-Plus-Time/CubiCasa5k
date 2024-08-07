@@ -2,9 +2,11 @@ import math
 import numpy as np
 from floortrans.loaders.svg_utils import PolygonWall, get_polygon, calc_distance, get_room_number, get_icon, get_icon_number, get_points, get_direction, get_gaussian2D
 from xml.dom import minidom
+from lxml import etree
 from skimage.draw import polygon
 import cv2
 
+NAMESPACE = "{http://www.w3.org/2000/svg}"
 
 all_rooms = {"Background": 0,  # Not in data. The default outside label
              "Alcove": 1,
@@ -359,7 +361,7 @@ class House:
         self.height = height
         self.width = width
         shape = height, width
-        svg = minidom.parse(path)
+        svg = etree.parse(path).getroot()
         self.walls = np.empty((height, width), dtype=np.uint8)
         self.walls.fill(0)
         self.wall_ids = np.empty((height, width), dtype=np.uint8)
@@ -386,9 +388,9 @@ class House:
 
         self.icon_areas = []
 
-        for e in svg.getElementsByTagName('g'):
+        for e in svg.findall(f".//{NAMESPACE}g"):
             try: 
-                if e.getAttribute("id") == "Wall":
+                if e.get("id") == "Wall":
                     wall = PolygonWall(e, wall_id, shape)
                     wall.rr, wall.cc = self._clip_outside(wall.rr, wall.cc)
                     self.wall_objs.append(wall)
@@ -398,7 +400,7 @@ class House:
 
                     wall_id += 1
 
-                if e.getAttribute("id") == "Railing":
+                if e.get("id") == "Railing":
                     wall = PolygonWall(e, wall_id, shape)
                     wall.rr, wall.cc = self._clip_outside(wall.rr, wall.cc)
                     self.wall_objs.append(wall)
@@ -412,8 +414,11 @@ class House:
                 if str(k) != 'small wall':
                     raise k
                 continue
+            except Exception as e:
+                print(e)
+                continue
 
-            if e.getAttribute("id") == "Window":
+            if e.get("id") == "Window":
                 X, Y = get_points(e)
                 rr, cc = polygon(X, Y)
                 cc, rr = self._clip_outside(cc, rr)
@@ -455,7 +460,7 @@ class House:
                 self.icons[cc, rr] = 1
                 self.icon_types.append(1)
 
-            if e.getAttribute("id") == "Door":
+            if e.get("id") == "Door":
                 # How to reperesent empty door space
                 X, Y = get_points(e)
                 rr, cc = polygon(X, Y)
@@ -498,7 +503,7 @@ class House:
                 self.icons[cc, rr] = 2
                 self.icon_types.append(2)
 
-            if "FixedFurniture " in e.getAttribute("class"):
+            if "FixedFurniture " in e.get("class", ""):
                 num = get_icon_number(e, icon_list)
                 if num is not None:
                     rr, cc, X, Y = get_icon(e)
@@ -518,7 +523,7 @@ class House:
                         locs = np.delete(locs, up_right_index, axis=0)
                         self.icon_corners['lower_left'].append(locs[0])
 
-                        icon_name = e.getAttribute('class').replace('FixedFurniture ', '').split(' ')[0]
+                        icon_name = e.get('class').replace('FixedFurniture ', '').split(' ')[0]
                         icon_name = icon_name_map[icon_name]
 
                         icon_rep = [[up_left, down_right], [icon_name, 1, 1]]
@@ -529,7 +534,7 @@ class House:
                         self.icons[rr, cc] = num
                         self.icon_types.append(num)
 
-            if "Space " in e.getAttribute("class"):
+            if "Space " in e.get("class", ""):
                 num = get_room_number(e, room_list)
                 rr, cc = get_polygon(e)
                 if len(rr) != 0:
@@ -541,13 +546,13 @@ class House:
                         rr_mean = int(round(np.mean(rr)))
                         cc_mean = int(round(np.mean(cc)))
                         center_box = [[rr_mean-10, cc_mean-10], [rr_mean+10, cc_mean+10]]
-                        room_name = e.getAttribute('class').replace('Space ', '').split(' ')[0]
+                        room_name = e.get('class').replace('Space ', '').split(' ')[0]
                         room_name = room_name_map[room_name]
                         self.representation['labels'].append([center_box, [room_name, 1, 1]])
 
-            # if "Stairs" in e.getAttribute("class"):
+            # if "Stairs" in e.get("class"):
                 # for c in e.childNodes:
-                    # if c.getAttribute("class") in ["Flight", "Winding"]:
+                    # if c.get("class") in ["Flight", "Winding"]:
                         # num = room_list["Stairs"]
                         # rr, cc = get_polygon(c)
                         # if len(rr) != 0:

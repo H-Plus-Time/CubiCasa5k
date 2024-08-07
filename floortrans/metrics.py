@@ -10,6 +10,7 @@ from torch.nn.functional import sigmoid, softmax, interpolate
 from skimage import draw
 from floortrans import post_prosessing
 from floortrans.loaders.augmentations import RotateNTurns
+from .loaders.svg_loader import FloorplanSVGSample
 from floortrans.plotting import shp_mask
 
 
@@ -129,9 +130,11 @@ def polygons_to_tensor(polygons_val, types_val, room_polygons_val, room_types_va
     return ten
 
 
-def get_evaluation_tensors(val, model, split, logger, rotate=True, n_classes=44):
-    images_val = val['image'].cuda()
-    labels_val = val['label']
+def get_evaluation_tensors(
+    val: FloorplanSVGSample, model, split, logger, rotate=True, n_classes=44
+):
+    images_val = val.image.cuda()
+    labels_val = val.label
     height = labels_val.shape[2]
     width = labels_val.shape[3]
     img_size = (height, width)

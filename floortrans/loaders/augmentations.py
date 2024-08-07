@@ -3,6 +3,7 @@ import random
 import numpy as np
 from math import inf
 from floortrans.loaders import svg_utils
+from floortrans.loaders.svg_loader import FloorplanSVGSample
 import cv2
 
 
@@ -47,14 +48,14 @@ class RandomRotations(object):
         elif format == 'cubi':
             self.augment = self.cubi
 
-    def __call__(self, sample):
+    def __call__(self, sample: FloorplanSVGSample):
         return self.augment(sample)
 
-    def cubi(self, sample):
-        fplan = sample['image']
-        segmentation = sample['label']
-        heatmap_points = sample['heatmaps']
-        scale = sample['scale']
+    def cubi(self, sample: FloorplanSVGSample):
+        fplan = sample.image
+        segmentation = sample.label
+        heatmap_points = sample.heatmaps
+        scale = sample.scale
         num_of_rotations = int(torch.randint(0, 3, (1,)))
         hmapp_convert_map = {0: 1, 1: 2, 2: 3, 3: 0, 4: 5, 5: 6, 6: 7, 7: 4, 8: 9, 9: 10,
                              10: 11, 11: 8, 12: 12, 13: 15, 14: 16, 15: 14, 16: 13,
@@ -78,13 +79,13 @@ class RandomRotations(object):
 
             heatmap_points = points_rotated
 
-        sample = {'image': fplan,
-                  'label': segmentation,
-                  'scale': scale,
-                  'heatmaps': heatmap_points}
+        sample = FloorplanSVGSample(image=fplan,
+                  label=segmentation,
+                  scale=scale,
+                  heatmaps=heatmap_points)
 
         return sample
-
+    # TODO: determine if this is unused
     def furu(self, sample):
         fplan = sample['image']
         segmentation = sample['label']
@@ -138,14 +139,14 @@ class DictToTensor(object):
         elif data_format == 'furukawa':
             self.augment = self.furukawa
 
-    def __call__(self, sample):
+    def __call__(self, sample: FloorplanSVGSample):
         return self.augment(sample)
 
-    def cubi(self, sample):
-        image, label = sample['image'], sample['label']
+    def cubi(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
         _, height, width = label.shape
-        heatmaps = sample['heatmaps']
-        scale = sample['scale']
+        heatmaps = sample.heatmaps
+        scale = sample.scale
 
         heatmap_tensor = np.zeros((21, height, width))
         for channel, coords in heatmaps.items():
@@ -165,10 +166,10 @@ class DictToTensor(object):
 
         label = torch.cat((heatmap_tensor, label), 0)
 
-        return {'image': image, 'label': label}
-
-    def furukawa(self, sample):
-        image, label = sample['image'], sample['label']
+        return FloorplanSVGSample(image=image, label=label)
+    # TODO: determine if this is unused
+    def furukawa(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
         _, height, width = label.shape
         heatmap_points = sample['heatmap_points']
 
@@ -186,7 +187,7 @@ class DictToTensor(object):
 
         label = torch.cat((heatmap_tensor, label), 0)
 
-        return {'image': image, 'label': label}
+        return FloorplanSVGSample(image=image, label=label)
 
 
 class RotateNTurns(object):
@@ -315,15 +316,15 @@ class RandomCropToSizeTorch(object):
         if data_format == 'dict':
             self.augment = self.augment_dict
         elif data_format == 'tensor':
-            self.augment = self.augment_tesor
+            self.augment = self.augment_tensor
         elif data_format == 'dict furu':
             self.augment = self.augment_dict_furu
 
-    def __call__(self, sample):
+    def __call__(self, sample: FloorplanSVGSample):
         return self.augment(sample)
 
-    def augment_tesor(self, sample):
-        image, label = sample['image'], sample['label']
+    def augment_tensor(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
         img_w = image.shape[2]
         img_h = image.shape[1]
         pad_w = int(self.width / 2)
@@ -367,9 +368,9 @@ class RandomCropToSizeTorch(object):
 
         return {'image': image, 'label': label}
 
-    def augment_dict(self, sample):
-        image, label = sample['image'], sample['label']
-        heatmap_points = sample['heatmaps']
+    def augment_dict(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
+        heatmap_points = sample.heatmaps
         img_w = image.shape[2]
         img_h = image.shape[1]
         pad_w = int(self.width / 2)
@@ -422,9 +423,9 @@ class RandomCropToSizeTorch(object):
             label = label[:, removed_up:-removed_down, removed_left:-removed_right]
             heatmap_points = clip_heatmaps(heatmap_points, removed_left, removed_left+self.width, removed_up, removed_up+self.height)
 
-        return {'image': image, 'label': label, 'heatmaps': heatmap_points, 'scale': sample['scale']}
+        return FloorplanSVGSample(image=image, label=label, heatmaps=heatmap_points, scale=sample.scale)
 
-
+    # TODO: determine if this is unused
     def augment_dict_furu(self, sample):
         image, label = sample['image'], sample['label']
         heatmap_points = sample['heatmap_points']
@@ -492,13 +493,13 @@ class ColorJitterTorch(object):
         self.dtype = dtype
         self.version = version
 
-    def __call__(self, sample):
+    def __call__(self, sample: FloorplanSVGSample):
         res = sample
-        image = sample['image']
+        image = sample.image
         image = self.brightness(image, self.b_var)
         image = self.contrast(image, self.c_var)
         image = self.saturation(image, self.s_var)
-        res['image'] = image
+        res.image = image
 
         return res
 
@@ -559,15 +560,15 @@ class ResizePaddedTorch(object):
             self.augment = self.augment_dict
             self.fill_cval = 1
 
-    def __call__(self, sample):
+    def __call__(self, sample: FloorplanSVGSample):
         # image 1: Bi-cubic interpolation as in original paper
-        image, _, _, _ = self.resize_padded(sample['image'], self.size, fill_cval=self.fill_cval, image=True, mode='bilinear', aling_corners=False)
-        sample['image'] = image
+        image, _, _, _ = self.resize_padded(sample.image, self.size, fill_cval=self.fill_cval, image=True, mode='bilinear', aling_corners=False)
+        sample.image = image
 
         return self.augment(sample)
-
-    def augment_tensor(self, sample):
-        image, label = sample['image'], sample['label']
+    # TODO: determine if this is unused
+    def augment_tensor(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
 
         if self.both:
             # labels 0: Nearest-neighbor interpolation
@@ -578,6 +579,7 @@ class ResizePaddedTorch(object):
 
         return {'image': image, 'label': label}
 
+    # TODO: determine if this is unused
     def augment_dict_furu(self, sample):
         image, label = sample['image'], sample['label']
         heatmap_points = sample['heatmap_points']
@@ -600,10 +602,10 @@ class ResizePaddedTorch(object):
 
         return {'image': image, 'label': label, 'heatmap_points': heatmap_points}
 
-    def augment_dict(self, sample):
-        image, label = sample['image'], sample['label']
-        heatmap_points = sample['heatmaps']
-        scale = sample['scale']
+    def augment_dict(self, sample: FloorplanSVGSample):
+        image, label = sample.image, sample.label
+        heatmap_points = sample.heatmaps
+        scale = sample.scale
 
         rooms_padded, _, _, _ = self.resize_padded(label[[0]], self.size, mode='nearest', fill_cval=self.fill[0])
         icons_padded, ratio, y_pad, x_pad = self.resize_padded(label[[1]], self.size, mode='nearest', fill_cval=self.fill[1])
@@ -623,7 +625,9 @@ class ResizePaddedTorch(object):
 
         heatmap_points = new_heatmap_points
 
-        return {'image': image, 'label': label, 'heatmaps': heatmap_points, 'scale': scale}
+        return FloorplanSVGSample(
+            image, label=label, heatmaps=heatmap_points, scale=scale
+        )
 
     def resize_padded(self, img, new_shape, image=False, fill_cval=0, mode='nearest',
                       aling_corners=None):

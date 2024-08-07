@@ -91,19 +91,19 @@ class UncertaintyLoss(Module):
         return w_mse_loss_total
 
     def get_loss(self):
-        d = {'total loss': [self.loss.data],
-             'room loss': [self.loss_rooms.data],
-             'icon loss': [self.loss_icons.data],
-             'heatmap loss': [self.loss_heatmap.data],
-             'total loss with variance': [self.loss_var.data],
-             'room loss with variance': [self.loss_rooms_var.data],
-             'icon loss with variance': [self.loss_icons_var.data],
-             'heatmap loss with variance': [self.loss_heatmap_var.data]}
+        d = {'total loss': [self.loss.data.detach().numpy(force=True)],
+             'room loss': [self.loss_rooms.data.detach().numpy(force=True)],
+             'icon loss': [self.loss_icons.data.detach().numpy(force=True)],
+             'heatmap loss': [self.loss_heatmap.data.detach().numpy(force=True)],
+             'total loss with variance': [self.loss_var.data.detach().numpy(force=True)],
+             'room loss with variance': [self.loss_rooms_var.data.detach().numpy(force=True)],
+             'icon loss with variance': [self.loss_icons_var.data.detach().numpy(force=True)],
+             'heatmap loss with variance': [self.loss_heatmap_var.data.detach().numpy(force=True)]}
         return pd.DataFrame(data=d)
 
     def get_var(self):
-        variance = torch.exp(self.log_vars.data)
-        mse_variance = torch.exp(self.log_vars_mse.data)
+        variance = torch.exp(self.log_vars.data).detach().numpy(force=True)
+        mse_variance = torch.exp(self.log_vars_mse.data).detach().numpy(force=True)
         d = {'room variance': [variance[0]],
              'icon variance': [variance[1]]}
         for i, m in enumerate(mse_variance):
@@ -113,8 +113,8 @@ class UncertaintyLoss(Module):
         return pd.DataFrame(data=d)
     
     def get_s(self):
-        s = self.log_vars.data
-        mse_s = self.log_vars_mse.data
+        s = self.log_vars.detach().numpy(force=True)
+        mse_s = self.log_vars_mse.detach().numpy(force=True)
         d = {'room s': [s[0]],
              'icon s': [s[1]]}
         for i, m in enumerate(mse_s):
