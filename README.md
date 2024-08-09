@@ -9,7 +9,7 @@ The model uses the neural network architecture presented in [Raster-to-Vector: R
 CubiCasa5K is a large-scale floorplan image dataset containing 5000 samples annotated into over 80 floorplan object categories. The dataset annotations are performed in a dense and versatile manner by using polygons for separating the different objects. You can download the CubiCasa5K dataset from [here](https://zenodo.org/record/2613548) and extract the zip file to data/ folder.
 
 ## Requirements
-The model is written for Python 3.6.5 and Pytorch 1.0.0 with CUDA enabled GPU. Other dependencies Python can be found in requirements.txt file with the exception of cv2 3.1.0 ([OpenCV](https://opencv.org/)). If you want to use the Dockerfile you need to have docker and [nvidia-docker2](https://github.com/NVIDIA/nvidia-docker) installed. We use pre-built image [anibali/pytorch:cuda-9.0](https://github.com/anibali/docker-pytorch) as a starting point and install other required libraries using pip. To create the container run in the:
+The model is written for Python 3.11 and Pytorch 2.4 with CUDA enabled GPU. See the pyproject.toml for dependencies (NB: support is limited to linux-64 and osx-arm64). If you want to use the Dockerfile you need to have docker and [nvidia-docker2](https://github.com/NVIDIA/nvidia-docker) installed. We use pre-built image [anibali/pytorch:cuda-9.0](https://github.com/anibali/docker-pytorch) as a starting point and install other required libraries using pip. To create the container run in the:
 ```bash
 docker build -t cubi -f Dockerfile .
 ```
@@ -25,6 +25,16 @@ docker run --rm -it --init \
   cubi jupyter-lab --port 1111 --ip 0.0.0.0 --no-browser
 ```
 You can now open a terminal in [JupyterLab web interface](http://localhost:1111) to execute more commands in the container.
+
+### Installation steps
+1. Get Pixi installed via (you might need a shell restart afterwards):
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+```
+2. Install the dev environment for model evaluation, or the cuda environment for both training and evaluation:
+```bash
+pixi install -e default
+```
 
 ## Database creation
 We create a LMDB database of the dataset, where we store the floorplan image, segmentation tensors and heatmap coordinates. This way we can access the data faster during training and evaluation. The downside however is that the database takes about 105G of hard drive space. There is an option to parse the SVG file on the go but it is slow for training.
