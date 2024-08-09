@@ -44,7 +44,7 @@ class LitModel(L.LightningModule):
         optimizer: OptimizerSelection,
         optimizer_options: dict,
         n_epoch: int,
-        l_rate: float
+        l_rate: float = 1e-3
     ):
         super().__init__()
         self.model = internal_model
@@ -70,6 +70,14 @@ class LitModel(L.LightningModule):
         )
         loss = self.criterion(output, labels_val)
         return loss
+    def predict_step(self, batch: FloorplanSVGSample, batch_idx: int):
+        output = self.model(batch.image)
+        return output
+    
+    def test_step(self, batch: FloorplanSVGSample, batch_idx: int):
+        print(batch, batch.image)
+        output = self.model(batch.image)
+        return output
 
     
     def transfer_batch_to_device(self, batch: FloorplanSVGSample | Any, device: torch.device, dataloader_idx: int):
@@ -108,7 +116,7 @@ class LitModel(L.LightningModule):
         ) | extras
 
 class LitDataModule(L.LightningDataModule):
-    def __init__(self, data_dir: str, scale: int, image_size: int, batch_size: int):
+    def __init__(self, data_dir: str, scale: int, image_size: int = 256, batch_size: int = 1):
         super().__init__()
         self.save_hyperparameters()
         self.data_dir = data_dir
@@ -116,15 +124,14 @@ class LitDataModule(L.LightningDataModule):
         self.scale = scale
         self.image_size = image_size
     def setup(self, stage: str):
+        pass
+        
+
+    def train_dataloader(self):
         augmentations = define_augmentations(self.scale, self.image_size)
         self.train_set = FloorplanSVG(
             self.data_dir, "train.txt", format="lmdb", augmentations=augmentations
         )
-        self.val_set = FloorplanSVG(
-            self.data_dir, "val.txt", format="lmdb", augmentations=DictToTensor()
-        )
-
-    def train_dataloader(self):
         train_loader = DataLoader(
             self.train_set,
             batch_size=self.batch_size | self.hparams.batch_size,
@@ -135,11 +142,24 @@ class LitDataModule(L.LightningDataModule):
         )
         return train_loader
     def val_dataloader(self):
+        self.val_set = FloorplanSVG(
+            self.data_dir, "val.txt", format="lmdb", augmentations=DictToTensor()
+        )
         return DataLoader(
             self.val_set,
             batch_size=1,
             num_workers=os.cpu_count() // 2,
             pin_memory=True,
+            collate_fn=custom_collate,
+        )
+    def test_dataloader(self):
+        test_set = FloorplanSVG(
+            self.data_dir, "test.txt", format="lmdb", augmentations=DictToTensor()
+        )
+        return DataLoader(
+            test_set,
+            batch_size=1,
+            num_workers=0,
             collate_fn=custom_collate,
         )
     
@@ -187,8 +207,8 @@ def define_augmentations(scale: Optional[float], image_size: int):
 
 def define_model(
     arch: ModelArchitecture,
-    n_classes: int,
-    input_slice,
+    n_classes: int = 44,
+    input_slice: Optional[list[int]]=[21, 12, 11],
     furukawa_weights: Optional[Any] = None,
 ):
     if arch == ModelArchitecture.HG_FURUKAWA_ORIGINAL:
@@ -254,7 +274,6 @@ def main(
     # guessed_batch_size = tuner.scale_batch_size(model, datamodule=datamodule, mode="binsearch")
     # print(guessed_batch_size)
     trainer.fit(model, datamodule=datamodule, **fit_extras)
-
 
 if __name__ == "__main__":
     typer.run(main)

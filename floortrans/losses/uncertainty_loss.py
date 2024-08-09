@@ -18,8 +18,8 @@ class UncertaintyLoss(Module):
         self.mask = mask
         self.sub = sub
         self.cuda = cuda
-        self.log_vars = Parameter(torch.tensor([0, 0], requires_grad=True, dtype=torch.float32).cuda())
-        self.log_vars_mse = Parameter(torch.zeros(input_slice[0], requires_grad=True, dtype=torch.float32).cuda())
+        self.log_vars = Parameter(torch.tensor([0, 0], requires_grad=True, dtype=torch.float32))
+        self.log_vars_mse = Parameter(torch.zeros(input_slice[0], requires_grad=True, dtype=torch.float32))
 
     def forward(self, input, target):
         n, c, h, w = input.size()
